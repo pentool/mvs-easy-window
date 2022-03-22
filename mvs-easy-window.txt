@@ -1,0 +1,217 @@
+// xs_begin
+// arg : { name = 'Orientation' value = '0'  range = '0 3'  step = '1'  decimal = '0' }
+// arg : { name = 'Style' value = '0'  range = '0 1'  step = '1'  decimal = '0' }
+// arg : { name = 'Show Glass' value = '1'  range = '0 1'  step = '1'  decimal = '0' }
+// arg : { name = 'Glass Color' value = '208'  range = '1 255'  step = '1'  decimal = '0' }
+// arg : { name = 'Grille Color' value = '158'  range = '1 255'  step = '1'  decimal = '0' }
+// arg : { name = 'Frame Size' value = '1'  range = '1 255'  step = '1'  decimal = '0' }
+// arg : { name = 'Grille Size' value = '1'  range = '1 255'  step = '1'  decimal = '0' }
+// arg : { name = 'Glass Inset' value = '0'  range = '0 255'  step = '1'  decimal = '0' }
+// arg : { name = 'Grille Inset' value = '0'  range = '0 255'  step = '1'  decimal = '0' }
+// arg : { name = 'V Grilles' value = '1'  range = '0 128'  step = '1'  decimal = '0' }
+// arg : { name = 'V Grille Spacing' value = '2'  range = '1 255'  step = '1'  decimal = '0' }
+// arg : { name = 'V Grille Offset' value = '0'  range = '-255 255'  step = '1'  decimal = '0' }
+// arg : { name = 'H Grilles' value = '1'  range = '0 128'  step = '1'  decimal = '0' }
+// arg : { name = 'H Grille Spacing' value = '2'  range = '1 255'  step = '1'  decimal = '0' }
+// arg : { name = 'H Grille Offset' value = '0'  range = '-255 255'  step = '1'  decimal = '0' }
+// xs_end
+
+
+// Orientation.
+// This parameter can be used to rotate the window around the Z-axis at 90 degree increments
+// for correct orientation depending on which 3D pane it was created on (X, -X, Y, -Y).
+int _orientation = int(i_args[0]);
+
+// Window style.
+// Regardless of the style chosen, the width and height of the window might need to be
+// adjusted by 1 voxel for even spacing, depending on whether the window size is odd or even.
+//
+// 0 = uses the grille spcing parameter only to create as many grilles as can fit inside
+// the given window size. The grille spacing parameter will have no effect.
+//
+// 1 = uses the number of grilles and grille spacing parameters together to create the window.
+// The spacing between grilles can be adjusted by the spacing value.
+int _style = int(i_args[1]);
+
+// Use glass?
+// If 0, no glass will be provided and space between window frame will be empty.
+// If 1, voxels will be provied for glass material to fill the hole between the window frame.
+bool _showGlass = bool(i_args[2]);
+
+// Glass color.
+float _glassColor = i_args[3];
+
+// Grille color.
+float _grilleColor = i_args[4];
+
+// Frame size.
+float _frameSize = i_args[5] - 1.0;
+
+// Grille size.
+float _grilleSize = i_args[6];
+
+// Glass inset.
+// The amount of voxels the glass pane will sit behind the window frame.
+// This parameter works in conjuction with the grille inset value.
+// If this value is less than the grille inset, the glass will push
+// the grilles towards the edge of the window frame. When increasing the value,
+// the grilles will pull back together with the glass into the frame.
+// Once the grilles reach their value they will not move with the glass any more.
+float _glassInset = i_args[7];
+
+// Grille inset.
+// The amount of voxels the grilles will sit behind the window frame.
+// This setting works in conjuction with the glass inset value so the
+// grilles can never be located behind the glass. When moving the grilles
+// back into the window frame, once they reach the position of the glass
+// they no longer move backwards. You will need to adjust the value of the
+// glass in order to move the grilles further back.
+float _grilleInset = i_args[8];
+
+// Number of vertical grilles.
+float _numVGrilles = i_args[9];
+
+// Vertical grille spacing.
+float _vGrilleSpacing = i_args[10];
+
+// Vertical grille offset.
+// Speecifies the offset of the vertical grille.
+float _vGrilleOffset = i_args[11];
+
+// Number of horizontal grilles.
+float _numHGrilles = i_args[12];
+
+// Horizontal grille spacing.
+float _hGrilleSpacing = i_args[13];
+
+// Horizontal grille offset.
+// Speecifies the offset of the horizontal grille.
+float _hGrilleOffset = i_args[14];
+
+
+ivec3 getOrientation() {
+	if (_orientation == 0) {
+		return ivec3(0, 2, 1);
+	}
+	else if (_orientation == 1) {
+		return ivec3(2, 1, 0);
+	}
+	else if (_orientation == 2) {
+		return ivec3(2, 0, 1);
+	}
+	else if (_orientation == 3) {
+		return ivec3(1, 2, 0);
+	}
+}
+
+float createWindow(vec3 v) {
+	ivec3 orientation = getOrientation();
+
+	int a1 = orientation[0];
+	int a2 = orientation[1];
+	int a3 = orientation[2];
+
+	// Check that we are within the frame limits.
+	if ((floor(v[a1]) > _frameSize) && (floor(v[a1]) < i_volume_size[a1] - 1.0 - _frameSize) &&
+		(floor(v[a2]) > _frameSize) && (floor(v[a2]) < i_volume_size[a2] - 1.0 - _frameSize)) {
+
+		// Adjust glass inset so the glass can only moved backwards until it reaches the edge of the window frame.
+		_glassInset = _glassInset < i_volume_size[a3] ? _glassInset : i_volume_size[a3] - 1.0;
+		
+		// 0. Create grilles based on given spacing parameter only.
+		if (_style == 0) {
+			
+			// Determine returned voxel color taking into account the grille and glass insets.
+			if ((mod(v[a1] - _frameSize + _vGrilleOffset - 1.0, _vGrilleSpacing) > 0.0) &&
+				(mod(v[a1] - _frameSize + _vGrilleOffset - 1.0, _grilleSize + _vGrilleSpacing + 0.0) < _vGrilleSpacing) &&
+				(mod(v[a2] - _frameSize + _hGrilleOffset - 1.0, _hGrilleSpacing) > 0.0) &&
+				(mod(v[a2] - _frameSize + _hGrilleOffset - 1.0, _grilleSize + _hGrilleSpacing + 0.0) < _hGrilleSpacing)) {
+				return _showGlass ? (floor(v[a3]) < i_volume_size[a3] - _glassInset ? _glassColor : 0.0) : 0.0;
+			}
+
+			return floor(v[a3]) < i_volume_size[a3] - min(_grilleInset, _glassInset) ? _grilleColor : 0.0;
+		}
+
+		// 1. Create grilles based on user specified number of grilles and spacing.
+		else if (_style == 1) {
+			float vGrilleSectionSize = 0.0;
+			float hGrilleSectionSize = 0.0;
+			float startPos = 0.0;
+			float endPos = 0.0;
+			bool bShowVertical = false;
+			bool bShowHorizontal = false;
+
+			// *********************************************
+			// ********** VERTICAL GRILLE SECTION **********
+			// *********************************************
+
+			// Calculate vertical grille section size.
+			// Section size is measured from the center of model cage.
+			if (_numVGrilles == 1.0) {
+				vGrilleSectionSize = _grilleSize / 2.0;
+			}
+			else if (_numVGrilles > 1.0) {
+				vGrilleSectionSize = ceil((_numVGrilles * _grilleSize + (_numVGrilles - 1.0) * _vGrilleSpacing) / 2.0);
+			}
+
+			// Calculate start and end offsets from the center of model space.
+			startPos = ceil(i_volume_size[a1] / 2.0) - vGrilleSectionSize + _vGrilleOffset;
+			endPos = ceil(i_volume_size[a1] / 2.0) + vGrilleSectionSize + _vGrilleOffset;
+
+			// Check for vertical grilles.
+			if ((v[a1] >= startPos) && (v[a1] <= endPos)) {
+				if (mod(v[a1] - startPos, _grilleSize + _vGrilleSpacing) < _grilleSize) {
+					bShowVertical = true;
+				}
+			}
+
+			// ***********************************************
+			// ********** HORIZONTAL GRILLE SECTION **********
+			// ***********************************************
+
+			// Calculate horizontal grille section size.
+			// Section size is measured from the center of model cage.
+			if (_numHGrilles == 1.0) {
+				hGrilleSectionSize = _grilleSize / 2.0;
+			}
+			else if (_numHGrilles > 1.0) {
+				hGrilleSectionSize = ceil((_numHGrilles * _grilleSize + (_numHGrilles - 1.0) * _hGrilleSpacing) / 2.0);
+			}
+
+			// Calculate start and end offsets from the center of model space.
+			startPos = ceil(i_volume_size[a2] / 2.0) - hGrilleSectionSize + _hGrilleOffset;
+			endPos = ceil(i_volume_size[a2] / 2.0) + hGrilleSectionSize + _hGrilleOffset;
+
+			// Check for horizontal grilles.
+			if ((v[a2] >= startPos) && (v[a2] <= endPos)) {
+				if (mod(v[a2] - startPos, _grilleSize + _hGrilleSpacing) < _grilleSize) {
+					bShowHorizontal = true;
+				}
+			}
+
+			// Determine returned voxel color taking into account the grille and glass insets.
+			if (bShowVertical || bShowHorizontal) {
+				return floor(v[a3]) < i_volume_size[a3] - min(_grilleInset, _glassInset) ? _grilleColor : 0.0;
+			}
+			else {
+				return _showGlass ? (floor(v[a3]) < i_volume_size[a3] - _glassInset ? _glassColor : 0.0) : 0.0;
+			}
+		}
+	}
+
+	return i_color_index;
+}
+
+float map(vec3 v) {
+	if (_orientation == 0) {
+		v.y = i_volume_size.y - v.y;
+	}
+	else if (_orientation == 1) {
+		v.xy = vec2(v.x, i_volume_size.y - v.y);
+	}
+	else if (_orientation == 3) {
+		v.x = i_volume_size.x - v.x;
+	}
+
+	return createWindow(v);
+}
